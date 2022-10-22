@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -51,7 +49,7 @@ and FLIP is a boolean to specify the sort order."
   :group 'docker-network
   :type '(cons (string :tag "Column Name"
                        :validate (lambda (widget)
-                                   (unless (--any-p (equal (plist-get it :name) (widget-value widget)) docker-network-columns)
+                                   (unless (cl-some (lambda (it) (equal (plist-get it :name) (widget-value widget))) docker-network-columns)
                                      (widget-put widget :error "Default Sort Key must match a column name")
                                      widget)))
                (choice (const :tag "Ascending" nil)
@@ -87,14 +85,18 @@ displayed values in the column."
   "Return the docker networks data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-network-id-template docker-network-columns))
          (data (aio-await (docker-run-docker-async "network" "ls" args (format "--format=\"%s\"" fmt))))
-         (lines (s-split "\n" data t)))
-    (-map (-partial #'docker-utils-parse docker-network-columns) lines)))
+         (lines (string-split data "\n" t)))
+    (mapcar (lambda (col) (docker-utils-parse docker-network-columns col)) lines)))
 
 (aio-defun docker-network-entries-propertized (&rest args)
   "Return the propertized docker networks data for `tabulated-list-entries'."
   (let ((entries (aio-await (docker-network-entries args)))
         (dangling (aio-await (docker-network-entries args "--filter dangling=true"))))
-    (--map-when (-contains? dangling it) (docker-network-entry-set-dangling it) entries)))
+    (mapcar (lambda (it)
+              (if (member it dangling)
+                  (docker-network-entry-set-dangling it)
+                it))
+            entries)))
 
 (defun docker-network-dangling-p (entry-id)
   "Predicate for if ENTRY-ID is dangling.
@@ -108,14 +110,14 @@ For example (docker-network-dangling-p (tabulated-list-get-id)) is t when the en
 The result is the tabulated list id for an entry is propertized with
 'docker-network-dangling and the entry is fontified with 'docker-face-dangling."
   (list (propertize (car entry) 'docker-network-dangling t)
-        (apply #'vector (--map (propertize it 'font-lock-face 'docker-face-dangling) (cadr entry)))))
+        (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
 (aio-defun docker-network-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :networks "Networks")
   (when docker-show-status
     (let* ((entries (aio-await (docker-network-entries-propertized (docker-network-ls-arguments))))
-           (dangling (--filter (docker-network-dangling-p (car it)) entries)))
+           (dangling (cl-remove-if-not (lambda (it) (docker-network-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :networks
                  (format "Networks (%s total, %s dangling)"
@@ -132,7 +134,7 @@ The result is the tabulated list id for an entry is propertized with
 
 (defun docker-network-read-name ()
   "Read a network name."
-  (completing-read "Network: " (-map #'car (aio-wait-for (docker-network-entries)))))
+  (completing-read "Network: " (mapcar #'car (aio-wait-for (docker-network-entries)))))
 
 (defun docker-network-mark-dangling ()
   "Mark only the dangling networks listed in *docker-networks*.

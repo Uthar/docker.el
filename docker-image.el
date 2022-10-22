@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -53,7 +51,7 @@ and FLIP is a boolean to specify the sort order."
   :group 'docker-image
   :type '(cons (string :tag "Column Name"
                        :validate (lambda (widget)
-                                   (unless (--any-p (equal (plist-get it :name) (widget-value widget)) docker-image-columns)
+                                   (unless (cl-some (lambda (it) (equal (plist-get it :name) (widget-value widget))) docker-image-columns)
                                      (widget-put widget :error "Default Sort Key must match a column name")
                                      widget)))
                (choice (const :tag "Ascending" nil)
@@ -115,24 +113,30 @@ PARSED-LINE is the output of `docker-utils-parse', the car is expected to
 be the list (repository tag id).  See `docker-image-id-template'."
   ;; This could be written as a complex go template,
   ;; however the literal '<none>' causes havoc in the windows shell.
-  (-let* ((([repo tag id] rest) parsed-line)
-          (new-id (if (or (equal repo "<none>") (equal tag "<none>"))
+  (seq-let ((repo tag id) rest)
+      parsed-line
+    (let ((new-id (if (or (equal repo "<none>") (equal tag "<none>"))
                       id
                     (format "%s:%s" repo tag))))
-    (list new-id rest)))
+      (list new-id rest))))
 
 (aio-defun docker-image-entries (&rest args)
   "Return the docker images data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-image-id-template docker-image-columns))
          (data (aio-await (docker-run-docker-async "image" "ls" args (format "--format=\"%s\"" fmt))))
-         (lines (s-split "\n" data t)))
-    (--map (docker-image-make-id (docker-utils-parse docker-image-columns it)) lines)))
+         (lines (string-split data "\n" t)))
+    (mapcar (lambda (it) (docker-image-make-id (docker-utils-parse docker-image-columns it))) lines)))
 
 (aio-defun docker-image-entries-propertized (&rest args)
   "Return the propertized docker images data for `tabulated-list-entries'."
   (let ((entries (aio-await (docker-image-entries args)))
         (dangling (aio-await (docker-image-entries args "--filter dangling=true"))))
-    (--map-when (-contains? dangling it) (docker-image-entry-set-dangling it) entries)))
+    (mapcar (lambda (it)
+              (if (member it dangling)
+                  (docker-image-entry-set-dangling it)
+                it))
+            entries)))
+
 
 (defun docker-image-dangling-p (entry-id)           ;
   "Predicate for if ENTRY-ID is dangling.
@@ -146,14 +150,14 @@ For example (docker-image-dangling-p (tabulated-list-get-id)) is t when the entr
 The result is the tabulated list id for an entry is propertized with
 'docker-image-dangling and the entry is fontified with 'docker-face-dangling."
   (list (propertize (car entry) 'docker-image-dangling t)
-        (apply #'vector (--map (propertize it 'font-lock-face 'docker-face-dangling) (cadr entry)))))
+        (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
 (aio-defun docker-image-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :images "Images")
   (when docker-show-status
     (let* ((entries (aio-await (docker-image-entries-propertized (docker-image-ls-arguments))))
-           (dangling (--filter (docker-image-dangling-p (car it)) entries)))
+           (dangling (cl-remove-if-not (lambda (it) (docker-image-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :images
                  (format "Images (%s total, %s dangling)"
@@ -170,7 +174,7 @@ The result is the tabulated list id for an entry is propertized with
 
 (defun docker-image-read-name ()
   "Read an image name."
-  (completing-read "Image: " (-map #'car (aio-wait-for (docker-image-entries)))))
+  (completing-read "Image: " (mapcar #'car (aio-wait-for (docker-image-entries)))))
 
 ;;;###autoload (autoload 'docker-image-pull-one "docker-image" nil t)
 (aio-defun docker-image-pull-one (name &optional all)
@@ -183,7 +187,7 @@ The result is the tabulated list id for an entry is propertized with
   "Run \"docker image run\" with COMMAND on the images selection."
   (interactive "sCommand: ")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async-with-buffer "container" "run" (transient-args 'docker-image-run) it command)))
 
 (aio-defun docker-image-tag-selection ()
@@ -191,7 +195,7 @@ The result is the tabulated list id for an entry is propertized with
   (interactive)
   (docker-utils-ensure-items)
   (let* ((ids (docker-utils-get-marked-items-ids))
-         (promises (--map (docker-run-docker-async "tag" it (read-string (format "Tag for %s: " it))) ids)))
+         (promises (mapcar (lambda (it) (docker-run-docker-async "tag" it (read-string (format "Tag for %s: " it)))) ids)))
     (aio-await (aio-all promises))
     (tablist-revert)))
 
@@ -255,7 +259,8 @@ applied to the buffer."
         (let* ((images (tablist-get-marked-items))
                (matched-args (let ((repo-name (caar images)))
                                (if repo-name
-                                   (--first (string-match (car it) repo-name)
+                                   (cl-find-if (lambda (it)
+                                                 (string-match (car it) repo-name))
                                             docker-image-run-custom-args)
                                  nil))))
           (if matched-args

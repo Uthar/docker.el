@@ -56,11 +56,11 @@
 
 (defun docker-get-transient-action ()
   "Extract the action out of `transient-current-command'."
-  (s-replace "-" " " (s-chop-prefix "docker-" (symbol-name transient-current-command))))
+  (cl-substitute ?\s ?- (string-remove-prefix "docker-" (symbol-name transient-current-command))))
 
 (defun docker-generic-action-description ()
   "Make the actions description for the selected items."
-  (let ((items (s-join ", " (docker-utils-get-marked-items-ids))))
+  (let ((items (string-join (docker-utils-get-marked-items-ids) ", ")))
     (format "%s %s"
             (propertize "Actions on" 'face 'transient-heading)
             (propertize items        'face 'transient-value))))
@@ -70,7 +70,7 @@
   (interactive (list (docker-get-transient-action)
                      (transient-args transient-current-command)))
   (let* ((ids (docker-utils-get-marked-items-ids))
-         (promises (--map (docker-run-docker-async action args it) ids)))
+         (promises (mapcar (lambda (it) (docker-run-docker-async action args it)) ids)))
     (aio-await (aio-all promises))
     (tablist-revert)))
 
@@ -85,14 +85,14 @@
   "Run \"`docker-command' ACTION ARGS\" and print output to a new buffer."
   (interactive (list (docker-get-transient-action)
                      (transient-args transient-current-command)))
-  (--each (docker-utils-get-marked-items-ids)
-    (docker-run-docker-async-with-buffer (s-split " " action) args it)))
+  (dolist (it (docker-utils-get-marked-items-ids))
+    (docker-run-docker-async-with-buffer (string-split action " ") args it)))
 
 (aio-defun docker-inspect ()
   "Run \"`docker-command' inspect\" on the selected items."
   (interactive)
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (let* ((id it)
            (data (aio-await (docker-run-docker-async "inspect" id))))
       (docker-utils-with-buffer (format "inspect %s" id)

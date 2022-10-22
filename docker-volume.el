@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -51,7 +49,7 @@ and FLIP is a boolean to specify the sort order."
   :group 'docker-volume
   :type '(cons (string :tag "Column Name"
                        :validate (lambda (widget)
-                                   (unless (--any-p (equal (plist-get it :name) (widget-value widget)) docker-volume-columns)
+                                   (unless (cl-some (lambda (it) (equal (plist-get it :name) (widget-value widget))) docker-volume-columns)
                                      (widget-put widget :error "Default Sort Key must match a column name")
                                      widget)))
                (choice (const :tag "Ascending" nil)
@@ -85,14 +83,18 @@ displayed values in the column."
   "Return the docker volumes data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-volume-id-template docker-volume-columns))
          (data (aio-await (docker-run-docker-async "volume" "ls" args (format "--format=\"%s\"" fmt))))
-         (lines (s-split "\n" data t)))
-    (-map (-partial #'docker-utils-parse docker-volume-columns) lines)))
+         (lines (string-split data "\n" t)))
+    (mapcar (lambda (line) (docker-utils-parse docker-volume-columns line)) lines)))
 
 (aio-defun docker-volume-entries-propertized (&rest args)
   "Return the propertized docker volumes data for `tabulated-list-entries'."
   (let ((entries (aio-await (docker-volume-entries args)))
         (dangling (aio-await (docker-volume-entries args "--filter dangling=true"))))
-    (--map-when (-contains? dangling it) (docker-volume-entry-set-dangling it) entries)))
+    (mapcar (lambda (it)
+              (if (member it dangling)
+                  (docker-volume-entry-set-dangling it)
+                it))
+            entries)))
 
 (defun docker-volume-dangling-p (entry-id)
   "Predicate for if ENTRY-ID is dangling.
@@ -106,14 +108,14 @@ For example (docker-volume-dangling-p (tabulated-list-get-id)) is t when the ent
 The result is the tabulated list id for an entry is propertized with
 'docker-volume-dangling and the entry is fontified with 'docker-face-dangling."
   (list (propertize (car entry) 'docker-volume-dangling t)
-        (apply #'vector (--map (propertize it 'font-lock-face 'docker-face-dangling) (cadr entry)))))
+        (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
 (aio-defun docker-volume-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :volumes "Volumes")
   (when docker-show-status
     (let* ((entries (aio-await (docker-volume-entries-propertized (docker-volume-ls-arguments))))
-           (dangling (--filter (docker-volume-dangling-p (car it)) entries)))
+           (dangling (cl-remove-if-not (lambda (it) (docker-volume-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :volumes
                  (format "Volumes (%s total, %s dangling)"
@@ -130,7 +132,7 @@ The result is the tabulated list id for an entry is propertized with
 
 (defun docker-volume-read-name ()
   "Read a volume name."
-  (completing-read "Volume: " (-map #'car (aio-wait-for (docker-volume-entries)))))
+  (completing-read "Volume: " (mapcar #'car (aio-wait-for (docker-volume-entries)))))
 
 ;;;###autoload (autoload 'docker-volume-dired "docker-volume" nil t)
 (aio-defun docker-volume-dired (name)
@@ -143,7 +145,7 @@ The result is the tabulated list id for an entry is propertized with
   "Run `docker-volume-dired' on the volumes selection."
   (interactive)
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-volume-dired it)))
 
 (defun docker-volume-mark-dangling ()

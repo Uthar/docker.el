@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'transient)
 
 (require 'docker-group)
@@ -51,7 +49,7 @@
 
 (aio-defun docker-compose-services ()
   "Return the list of services."
-  (s-split "\n" (aio-await (docker-compose-run-docker-compose-async "config" "--services" "2>/dev/null")) t))
+  (string-split (aio-await (docker-compose-run-docker-compose-async "config" "--services" "2>/dev/null")) "\n" t))
 
 (aio-defun docker-compose-read-services-names ()
   "Read the services names."
@@ -93,7 +91,7 @@
 (aio-defun docker-compose-run-action-for-one-service (action args services)
   "Run \"docker-compose ACTION ARGS SERVICES\"."
   (interactive (list
-                (-last-item (s-split "-" (symbol-name transient-current-command)))
+                (car (last (string-split (symbol-name transient-current-command) "-")))
                 (transient-args transient-current-command)
                 nil))
   (setq services (aio-await (docker-compose-read-services-names)))
@@ -102,14 +100,14 @@
 (defun docker-compose-run-action-for-all-services (action args)
   "Run \"docker-compose ACTION ARGS\"."
   (interactive (list
-                (-last-item (s-split "-" (symbol-name transient-current-command)))
+                (car (last (string-split (symbol-name transient-current-command) "-")))
                 (transient-args transient-current-command)))
   (docker-compose-run-docker-compose-async-with-buffer action args))
 
 (aio-defun docker-compose-run-action-with-command (action args service command)
   "Run \"docker-compose ACTION ARGS SERVICE COMMAND\"."
   (interactive (list
-                (-last-item (s-split "-" (symbol-name transient-current-command)))
+                (car (last (string-split (symbol-name transient-current-command) "-")))
                 (transient-args transient-current-command)
                 nil
                 (read-string "Command: ")))

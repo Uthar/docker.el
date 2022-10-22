@@ -24,9 +24,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -57,7 +55,7 @@ and FLIP is a boolean to specify the sort order."
   :group 'docker-container
   :type '(cons (string :tag "Column Name"
                        :validate (lambda (widget)
-                                   (unless (--any-p (equal (plist-get it :name) (widget-value widget)) docker-container-columns)
+                                   (unless (cl-some (lambda (it) (equal (plist-get it :name) (widget-value widget))) docker-container-columns)
                                      (widget-put widget :error "Default Sort Key must match a column name")
                                      widget)))
                (choice (const :tag "Ascending" nil)
@@ -98,9 +96,9 @@ string that transforms the displayed values in the column."
 (defun docker-container-status-face (status)
   "Return the correct face according to STATUS."
   (cond
-   ((s-starts-with? "Up" status)
+   ((string-prefix-p "Up" status)
     'docker-face-status-up)
-   ((s-starts-with? "Exited" status)
+   ((string-prefix-p "Exited" status)
     'docker-face-status-down)
    (t
     'docker-face-status-other)))
@@ -109,17 +107,17 @@ string that transforms the displayed values in the column."
   "Return the docker containers data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-container-id-template docker-container-columns))
          (data (aio-await (docker-run-docker-async "container" "ls" args (format "--format=\"%s\"" fmt))))
-         (lines (s-split "\n" data t)))
-    (-map (-partial #'docker-utils-parse docker-container-columns) lines)))
+         (lines (string-split data "\n" t)))
+    (mapcar (lambda (line) (docker-utils-parse docker-container-columns line)) lines)))
 
 (aio-defun docker-container-entries-propertized (&rest args)
   "Return the propertized docker containers data for `tabulated-list-entries'."
   (let ((entries (aio-await (docker-container-entries args))))
-    (-map #'docker-container-propertize-entry entries)))
+    (mapcar #'docker-container-propertize-entry entries)))
 
 (defun docker-container-propertize-entry (entry)
   "Propertize ENTRY."
-  (let* ((index (--find-index (string-equal "Status" (plist-get it :name)) docker-container-columns))
+  (let* ((index (cl-position-if (lambda (it) (string-equal "Status" (plist-get it :name))) docker-container-columns))
          (data (cadr entry))
          (status (aref data index)))
     (aset data index (propertize status 'font-lock-face (docker-container-status-face status)))
@@ -130,12 +128,12 @@ string that transforms the displayed values in the column."
   (plist-put docker-status-strings :containers "Containers")
   (when docker-show-status
     (let* ((entries (aio-await (docker-container-entries-propertized (docker-container-ls-arguments))))
-           (index (--find-index (string-equal "Status" (plist-get it :name)) docker-container-columns))
-           (statuses (--map (aref (cadr it) index) entries))
-           (faces (--map (get-text-property 0 'font-lock-face it) statuses))
+           (index (cl-position-if (lambda (it) (string-equal "Status" (plist-get it :name))) docker-container-columns))
+           (statuses (mapcar (lambda (it) (aref (cadr it) index)) entries))
+           (faces (mapcar (lambda (it) (get-text-property 0 'font-lock-face it)) statuses))
            (all (length faces))
-           (up (-count (-partial #'equal 'docker-face-status-up) faces))
-           (down (-count (-partial #'equal 'docker-face-status-down) faces))
+           (up (cl-count-if (lambda (face) (equal 'docker-face-status-up face)) faces))
+           (down (cl-count-if (lambda (face) (equal 'docker-face-status-down face)) faces))
            (other (- all up down)))
       (plist-put docker-status-strings
                  :containers
@@ -155,7 +153,7 @@ string that transforms the displayed values in the column."
 
 (defun docker-container-read-name ()
   "Read an container name."
-  (completing-read "Container: " (-map #'car (aio-wait-for (docker-container-entries)))))
+  (completing-read "Container: " (mapcar #'car (aio-wait-for (docker-container-entries)))))
 
 (defvar eshell-buffer-name)
 
@@ -166,7 +164,7 @@ string that transforms the displayed values in the column."
   (let* ((container-address (format "docker:%s:/" container))
          (file-prefix (let ((prefix (file-remote-p default-directory)))
                         (if prefix
-                            (format "%s|" (s-chop-suffix ":" prefix))
+                            (format "%s|" (string-remove-suffix ":" prefix))
                           "/")))
          (default-directory (format "%s%s" file-prefix container-address))
          (eshell-buffer-name (docker-utils-generate-new-buffer-name "docker" "eshell:" default-directory)))
@@ -204,7 +202,7 @@ string that transforms the displayed values in the column."
          (container-address (format "docker:%s:/" container))
          (file-prefix (let ((prefix (file-remote-p default-directory)))
                         (if prefix
-                            (format "%s|" (s-chop-suffix ":" prefix))
+                            (format "%s|" (string-remove-suffix ":" prefix))
                           "/")))
          (default-directory (format "%s%s" file-prefix container-address)))
     (shell (docker-utils-generate-new-buffer "docker" "shell:" default-directory))))
@@ -221,7 +219,7 @@ nil, ask the user for it."
          (container-address (format "docker:%s:" container))
          (file-prefix (let ((prefix (file-remote-p default-directory)))
                         (if prefix
-                            (format "%s|" (s-chop-suffix ":" prefix))
+                            (format "%s|" (string-remove-suffix ":" prefix))
                           "/")))
          (container-config (cdr (assq 'Config (aref (json-read-from-string (aio-await (docker-run-docker-async "inspect" container))) 0))))
          (container-workdir (cdr (assq 'WorkingDir container-config)))
@@ -239,7 +237,7 @@ nil, ask the user for it."
       (let* ((container-address (format "docker:%s:/" container))
              (file-prefix (let ((prefix (file-remote-p default-directory)))
                             (if prefix
-                                (format "%s|" (s-chop-suffix ":" prefix))
+                                (format "%s|" (string-remove-suffix ":" prefix))
                               "/")))
              (default-directory (format "%s%s" file-prefix container-address)))
         (vterm-other-window (docker-utils-generate-new-buffer-name "docker" "vterm:" default-directory)))
@@ -249,42 +247,42 @@ nil, ask the user for it."
   "Run \"docker cp\" from CONTAINER-PATH to HOST-PATH for selected container."
   (interactive "sContainer path: \nFHost path: ")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async "cp" (concat it ":" container-path) host-path)))
 
 (defun docker-container-cp-to-selection (host-path container-path)
   "Run \"docker cp\" from HOST-PATH to CONTAINER-PATH for selected containers."
   (interactive "fHost path: \nsContainer path: ")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async "cp" host-path (concat it ":" container-path))))
 
 (defun docker-container-eshell-selection ()
   "Run `docker-container-eshell' on the containers selection."
   (interactive)
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-eshell it)))
 
 (defun docker-container-find-directory-selection (path)
   "Run `docker-container-find-directory' for PATH on the containers selection."
   (interactive "sPath: ")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-find-directory it path)))
 
 (defun docker-container-find-file-selection (path)
   "Run `docker-container-find-file' for PATH on the containers selection."
   (interactive "sPath: ")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-find-file it path)))
 
 (aio-defun docker-container-rename-selection ()
   "Rename containers."
   (interactive)
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (aio-await (docker-run-docker-async "rename" it (read-string (format "Rename \"%s\" to: " it)))))
   (tablist-revert))
 
@@ -292,14 +290,14 @@ nil, ask the user for it."
   "Run `docker-container-shell' on the containers selection forwarding PREFIX."
   (interactive "P")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-shell it prefix)))
 
 (defun docker-container-shell-env-selection (prefix)
   "Run `docker-container-shell-env' on the containers selection forwarding PREFIX."
   (interactive "P")
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-shell-env it prefix)))
 
 (defun docker-container-unpause-selection ()
@@ -312,7 +310,7 @@ nil, ask the user for it."
   "Run `docker-container-vterm' on the containers selection."
   (interactive)
   (docker-utils-ensure-items)
-  (--each (docker-utils-get-marked-items-ids)
+  (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-vterm it)))
 
 (docker-utils-transient-define-prefix docker-container-attach ()

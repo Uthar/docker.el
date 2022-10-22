@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 
 (require 'docker-group)
 (require 'docker-utils)
@@ -59,8 +57,8 @@
 (defun docker-run-start-file-process-shell-command (program &rest args)
   "Execute \"PROGRAM ARGS\" and return the process."
   (docker-with-sudo
-    (let* ((process-args (-remove 's-blank? (-flatten args)))
-           (command (s-join " " (-insert-at 0 program process-args))))
+    (let* ((process-args (cl-remove-if #'string-blank-p (flatten-list args)))
+           (command (string-join (cons program process-args) " ")))
       (when docker-show-messages (message "Running: %s" command))
       (start-file-process-shell-command command (apply #'docker-utils-generate-new-buffer-name program process-args) command))))
 
@@ -69,7 +67,8 @@
   (let* ((process (apply #'docker-run-start-file-process-shell-command program args))
          (promise (aio-promise)))
     (set-process-query-on-exit-flag process nil)
-    (set-process-sentinel process (-partial #'docker-process-sentinel promise))
+    (set-process-sentinel process (lambda (&rest rest)
+                                    (apply #'docker-process-sentinel promise rest)))
     promise))
 
 (defun docker-run-async-with-buffer (program &rest args)
@@ -90,8 +89,8 @@
   (defvar vterm-kill-buffer-on-exit)
   (defvar vterm-shell)
   (if (fboundp 'vterm-other-window)
-      (let* ((process-args (-remove 's-blank? (-flatten args)))
-             (vterm-shell (s-join " " (-insert-at 0 program process-args)))
+      (let* ((process-args (cl-remove-if #'string-blank-p (flatten-list args)))
+             (vterm-shell (string-join (cons program process-args) " "))
              (vterm-kill-buffer-on-exit nil))
         (vterm-other-window
          (apply #'docker-utils-generate-new-buffer-name program process-args)))

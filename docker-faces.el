@@ -23,9 +23,6 @@
 
 ;;; Code:
 
-(require 's)
-(require 'dash)
-
 (require 'docker-core)
 
 (defgroup docker-faces nil

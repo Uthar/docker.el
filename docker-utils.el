@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-(require 's)
 (require 'aio)
-(require 'dash)
 (require 'json)
 (require 'tramp)
 (require 'tablist)
@@ -33,7 +31,7 @@
 
 (defun docker-utils-get-marked-items-ids ()
   "Get the id part of `tablist-get-marked-items'."
-  (-map #'car (tablist-get-marked-items)))
+  (mapcar #'car (tablist-get-marked-items)))
 
 (defun docker-utils-ensure-items ()
   "Ensure at least one item is selected."
@@ -42,7 +40,7 @@
 
 (defun docker-utils-generate-new-buffer-name (program &rest args)
   "Wrapper around `generate-new-buffer-name' using PROGRAM and ARGS."
-  (generate-new-buffer-name (format "* %s %s *" program (s-join " " args))))
+  (generate-new-buffer-name (format "* %s %s *" program (string-join args " "))))
 
 (defun docker-utils-generate-new-buffer (program &rest args)
   "Wrapper around `generate-new-buffer' using PROGRAM and ARGS."
@@ -99,13 +97,13 @@ Execute BODY in a buffer named with the help of NAME."
 
 (defun docker-utils-unit-multiplier (str)
   "Return the correct multiplier for STR."
-  (expt 1024 (-elem-index (upcase str) '("B" "KB" "MB" "GB" "TB" "PB" "EB"))))
+  (expt 1024 (seq-position '("B" "KB" "MB" "GB" "TB" "PB" "EB") (upcase str))))
 
 (defun docker-utils-human-size-to-bytes (str)
   "Parse STR and return size in bytes."
-  (let* ((parts (s-match "^\\([0-9\\.]+\\)\\([A-Z]+\\)?$" str))
-         (value (string-to-number (-second-item parts)))
-         (multiplier (docker-utils-unit-multiplier (-third-item parts))))
+  (let* ((parts (string-match "^\\([0-9\\.]+\\)\\([A-Z]+\\)?$" str))
+         (value (string-to-number (match-string 1 str)))
+         (multiplier (docker-utils-unit-multiplier (match-string 2 str))))
     (* value multiplier)))
 
 (defun docker-utils-human-size-predicate (a b)
@@ -115,15 +113,20 @@ Execute BODY in a buffer named with the help of NAME."
 (defun docker-utils-columns-list-format (columns-spec)
   "Convert COLUMNS-SPEC (a list of plists) to 'tabulated-list-format', i.e. a vector of (name width sort-fn)."
   (apply 'vector
-  (--map-indexed
-   (-let* (((&plist :name name :width width :sort sort-fn-inner) it)
-           (sort-fn (if sort-fn-inner
-                        (let ((idx it-index)) ;; Rebind the closure var!
-                          ;; Sort fn is called with (id [entries..])
-                          ;; Extract the column value and pass to inner function
-                          (-on sort-fn-inner (lambda (x) (elt (cadr x) idx))))
-                      t)))
-     (list name width sort-fn))
+  (seq-map-indexed
+   (lambda (it it-index)
+     (let* ((name (plist-get it :name))
+            (width (plist-get it :width))
+            (sort-fn-inner (plist-get it :sort))
+            (sort-fn (if sort-fn-inner
+                         (let ((idx it-index))
+                           (lambda (&rest args)
+                             (apply sort-fn-inner
+                                    (mapcar (lambda (x)
+                                              (elt (cadr x) idx))
+                                            args))))
+                       t)))
+       (list name width sort-fn)))
    columns-spec)))
 
 (defun docker-utils-make-format-string (id-template column-spec)
@@ -132,7 +135,7 @@ Execute BODY in a buffer named with the help of NAME."
 ID-TEMPLATE is the Go template used to extract the property that
 identifies the object (usually its id).
 COLUMN-SPEC is the value of docker-X-columns."
-  (let* ((templates (--map (plist-get it :template) column-spec))
+  (let* ((templates (mapcar (lambda (it) (plist-get it :template)) column-spec))
          (delimited (string-join templates ",")))
     (format "[%s,%s]" id-template delimited)))
 
@@ -144,15 +147,24 @@ defcustom (e.g. `docker-image-columns`) used to apply any custom format function
   (condition-case nil
       (let* ((data (json-read-from-string line)))
         ;; apply format function, if any
-        (--each-indexed
-            column-specs
-          (let ((fmt-fn (plist-get it :format))
-                (data-index (+ it-index 1)))
-            (when fmt-fn (aset data data-index (apply fmt-fn (list (aref data data-index)))))))
-
+        (seq-do-indexed
+         (lambda (it it-index)
+            (let ((fmt-fn (plist-get it :format))
+                  (data-index (+ it-index 1)))
+              (when fmt-fn (aset data data-index (apply fmt-fn (list (aref data data-index)))))))
+         column-specs)
         (list (aref data 0) (seq-drop data 1)))
     (json-readtable-error
      (error "Could not read following string as json:\n%s" line))))
+
+(defun alist-plist (alist)
+  "Returns a property list containing the same keys and values as the
+association list ALIST in the same order."
+  (let (plist)
+    (dolist (pair alist)
+      (push (car pair) plist)
+      (push (cdr pair) plist))
+    (nreverse plist)))
 
 (defun docker-utils-columns-setter (sym new-value)
   "Convert NEW-VALUE into a list of plists, then assign to SYM.
@@ -161,8 +173,8 @@ If NEW-VALUE already looks like a list of plists, no conversion is performed and
  NEW-VALUE is assigned to SYM unchanged.  This is expected to be used as the
 value of :set in a defcustom."
   (let ((is-plist (plist-member (car new-value) :name))
-        (new-value-plist (--map
-                          (-interleave '(:name :width :template :sort :format) it)
+        (new-value-plist (mapcar (lambda (it)
+                                   (alist-plist (reverse (cl-pairlis '(:name :width :template :sort :format) it))))
                           new-value)))
     (set sym (if is-plist new-value new-value-plist))))
 
