@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-
 (require 'json)
-(require 'tablist)
 (require 'transient)
 
 (require 'docker-core)
@@ -143,12 +141,12 @@ This clears any user marks first and respects any tablist filters
 applied to the buffer."
   (interactive)
   (switch-to-buffer "*docker-networks*")
-  (tablist-unmark-all-marks)
+  (docker-unmark-all-marks)
   (save-excursion
     (goto-char (point-min))
     (while (not (eobp))
       (when (docker-network-dangling-p (tabulated-list-get-id))
-        (tablist-put-mark))
+        (docker-mark-item))
       (forward-line))))
 
 (docker-utils-define-transient-arguments docker-network-ls)
@@ -161,7 +159,7 @@ applied to the buffer."
    ("f" "Filter" "--filter " read-string)
    ("n" "Don't truncate" "--no-trunc")]
   ["Actions"
-   ("l" "List" tablist-revert)])
+   ("l" "List" revert-buffer)])
 
 (docker-utils-transient-define-prefix docker-network-rm ()
   "Transient for removing networks."
@@ -179,6 +177,7 @@ applied to the buffer."
 
 (defvar docker-network-mode-map
   (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map docker-base-map)
     (define-key map "?" 'docker-network-help)
     (define-key map "D" 'docker-network-rm)
     (define-key map "I" 'docker-network-inspect)
@@ -193,7 +192,7 @@ applied to the buffer."
   (interactive)
   (docker-utils-pop-to-buffer "*docker-networks*")
   (docker-network-mode)
-  (tablist-revert))
+  (revert-buffer))
 
 (define-derived-mode docker-network-mode tabulated-list-mode "Networks Menu"
   "Major mode for handling a list of docker networks."
@@ -202,7 +201,7 @@ applied to the buffer."
   (setq tabulated-list-sort-key docker-network-default-sort-key)
   (add-hook 'tabulated-list-revert-hook 'docker-network-refresh nil t)
   (tabulated-list-init-header)
-  (tablist-minor-mode))
+  (revert-buffer))
 
 (provide 'docker-network)
 

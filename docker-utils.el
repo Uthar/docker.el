@@ -23,15 +23,66 @@
 
 ;;; Code:
 
-
 (require 'json)
 (require 'tramp)
-(require 'tablist)
 (require 'transient)
+(require 'dired)
+
+(defun docker-mark-item ()
+  (interactive)
+  (save-excursion
+    (let ((inhibit-read-only t))
+      (goto-char (line-beginning-position))
+      (forward-char tabulated-list-padding)
+      (add-face-text-property (point) (line-end-position) 'dired-marked)
+      (add-text-properties (point) (line-end-position) '(docker-marked t))
+      (tabulated-list-put-tag (propertize "*" 'face 'dired-mark))))
+  (forward-line))
+
+(defun docker-unmark-item ()
+  (interactive)
+  (save-excursion
+    (let ((inhibit-read-only t))
+      (tabulated-list-put-tag " ")
+      (remove-text-properties (line-beginning-position)
+                              (line-end-position)
+                              '(docker-marked nil face nil)))))
+
+(defun docker-unmark-all-items ()
+  (interactive)
+  (save-excursion
+    (let ((inhibit-read-only t))
+      (goto-char (point-max))
+      (while (zerop (forward-line -1))
+        (docker-unmark-item)))))
+
+(defun docker-get-marked-items ()
+  (save-excursion
+    (goto-char (point-max))
+    (let ((items (list))
+          (inhibit-read-only t))
+      (while (zerop (forward-line -1))
+        (forward-word)
+        (when (get-text-property (point) 'docker-marked)
+          (push (cons (tabulated-list-get-id)
+                      (tabulated-list-get-entry))
+                items)))
+      items)))
+
+(defvar docker-base-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "m" 'docker-mark-item)
+    (define-key map "u" 'docker-unmark-item)
+    (define-key map "U" 'docker-unmark-all-items)
+    (define-key map "n" 'next-line)
+    (define-key map "p" 'previous-line)
+    (define-key map "q" 'kill-buffer-and-window)
+    (define-key map "g" 'revert-buffer)
+    map))
 
 (defun docker-utils-get-marked-items-ids ()
   "Get the id part of `tablist-get-marked-items'."
-  (mapcar #'car (tablist-get-marked-items)))
+  (mapcar #'car (docker-get-marked-items)))
 
 (defun docker-utils-ensure-items ()
   "Ensure at least one item is selected."

@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-
 (require 'json)
-(require 'tablist)
 (require 'transient)
 
 (require 'docker-core)
@@ -155,12 +153,12 @@ This clears any user marks first and respects any tablist filters
 applied to the buffer."
   (interactive)
   (switch-to-buffer "*docker-volumes*")
-  (tablist-unmark-all-marks)
+  (docker-unmark-all-marks)
   (save-excursion
     (goto-char (point-min))
     (while (not (eobp))
       (when (docker-volume-dangling-p (tabulated-list-get-id))
-        (tablist-put-mark))
+        (docker-mark-item))
       (forward-line))))
 
 (docker-utils-define-transient-arguments docker-volume-ls)
@@ -172,7 +170,7 @@ applied to the buffer."
    ("d" "Dangling" "--filter dangling=true")
    ("f" "Filter" "--filter " read-string)]
   ["Actions"
-   ("l" "List" tablist-revert)])
+   ("l" "List" revert-buffer)])
 
 (docker-utils-transient-define-prefix docker-volume-rm ()
   "Transient for removing volumes."
@@ -191,6 +189,7 @@ applied to the buffer."
 
 (defvar docker-volume-mode-map
   (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map docker-base-map)
     (define-key map "?" 'docker-volume-help)
     (define-key map "D" 'docker-volume-rm)
     (define-key map "I" 'docker-volume-inspect)
@@ -206,7 +205,7 @@ applied to the buffer."
   (interactive)
   (docker-utils-pop-to-buffer "*docker-volumes*")
   (docker-volume-mode)
-  (tablist-revert))
+  (revert-buffer))
 
 (define-derived-mode docker-volume-mode tabulated-list-mode "Volumes Menu"
   "Major mode for handling a list of docker volumes."
@@ -215,7 +214,7 @@ applied to the buffer."
   (setq tabulated-list-sort-key docker-volume-default-sort-key)
   (add-hook 'tabulated-list-revert-hook 'docker-volume-refresh nil t)
   (tabulated-list-init-header)
-  (tablist-minor-mode))
+  (revert-buffer))
 
 (provide 'docker-volume)
 

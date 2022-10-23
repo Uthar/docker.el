@@ -23,7 +23,6 @@
 
 ;;; Code:
 
-
 (require 'transient)
 
 (require 'docker-group)
@@ -72,14 +71,14 @@
   (let ((ids (docker-utils-get-marked-items-ids)))
     (dolist (id ids)
       (docker-run-docker-async action args id))
-    (tablist-revert)))
+    (revert-buffer)))
 
 (defun docker-generic-action-multiple-ids (action args)
   "Same as `docker-generic-action', but group selection ids into a single command."
   (interactive (list (docker-get-transient-action)
                      (transient-args transient-current-command)))
   (docker-run-docker-async action args (docker-utils-get-marked-items-ids))
-  (tablist-revert))
+  (revert-buffer))
 
 (defun docker-generic-action-with-buffer (action args)
   "Run \"`docker-command' ACTION ARGS\" and print output to a new buffer."

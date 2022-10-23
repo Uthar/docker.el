@@ -23,9 +23,7 @@
 
 ;;; Code:
 
-
 (require 'json)
-(require 'tablist)
 (require 'transient)
 
 (require 'docker-core)
@@ -181,7 +179,7 @@ The result is the tabulated list id for an entry is propertized with
   "Pull the image named NAME.  If ALL is set, use \"-a\"."
   (interactive (list (docker-image-read-name) current-prefix-arg))
   (docker-run-docker-async "pull" (when all "-a") name)
-  (tablist-revert))
+  (revert-buffer))
 
 (defun docker-image-run-selection (command)
   "Run \"docker image run\" with COMMAND on the images selection."
@@ -197,7 +195,7 @@ The result is the tabulated list id for an entry is propertized with
   (let ((ids (docker-utils-get-marked-items-ids)))
     (dolist (id ids)
       (docker-run-docker-async "tag" id (read-string (format "Tag for %s: " id))))
-    (tablist-revert)))
+  (revert-buffer)))
 
 (defun docker-image-mark-dangling ()
   "Mark only the dangling images listed in *docker-images*.
@@ -206,12 +204,12 @@ This clears any user marks first and respects any tablist filters
 applied to the buffer."
   (interactive)
   (switch-to-buffer "*docker-images*")
-  (tablist-unmark-all-marks)
+  (docker-unmark-all-items)
   (save-excursion
     (goto-char (point-min))
     (while (not (eobp))
       (when (docker-image-dangling-p (tabulated-list-get-id))
-        (tablist-put-mark))
+        (docker-mark-item))
       (forward-line))))
 
 (docker-utils-define-transient-arguments docker-image-ls)
@@ -225,7 +223,7 @@ applied to the buffer."
    ("f" "Filter" "--filter " read-string)
    ("n" "Don't truncate" "--no-trunc")]
   ["Actions"
-   ("l" "List" tablist-revert)])
+   ("l" "List" revert-buffer)])
 
 (transient-define-prefix docker-image-pull ()
   "Transient for pulling images."
@@ -256,7 +254,7 @@ applied to the buffer."
 (cl-defmethod transient-init-value ((obj docker-run-prefix))
   "Helper that modify OBJ DOCKER-RUN-PREFIX to handle `docker-image-run-custom-args'."
   (oset obj value
-        (let* ((images (tablist-get-marked-items))
+        (let* ((images (docker-get-marked-items))
                (matched-args (let ((repo-name (caar images)))
                                (if repo-name
                                    (cl-find-if (lambda (it)
@@ -307,6 +305,7 @@ applied to the buffer."
 
 (defvar docker-image-mode-map
   (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map docker-base-map)
     (define-key map "?" 'docker-image-help)
     (define-key map "D" 'docker-image-rm)
     (define-key map "F" 'docker-image-pull)
@@ -325,7 +324,7 @@ applied to the buffer."
   (interactive)
   (docker-utils-pop-to-buffer "*docker-images*")
   (docker-image-mode)
-  (tablist-revert))
+  (revert-buffer))
 
 (define-derived-mode docker-image-mode tabulated-list-mode "Images Menu"
   "Major mode for handling a list of docker images."
@@ -334,7 +333,7 @@ applied to the buffer."
   (setq tabulated-list-sort-key docker-image-default-sort-key)
   (add-hook 'tabulated-list-revert-hook 'docker-image-refresh nil t)
   (tabulated-list-init-header)
-  (tablist-minor-mode))
+  (revert-buffer))
 
 (provide 'docker-image)
 

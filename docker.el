@@ -4,7 +4,7 @@
 ;; URL: https://github.com/Silex/docker.el
 ;; Keywords: filename, convenience
 ;; Version: 2.2.0
-;; Package-Requires: ((aio "1.0") (emacs "26.1") (tablist "1.0") (transient "0.3.7"))
+;; Package-Requires: ((emacs "26.1") (transient "0.3.7"))
 
 ;; This file is NOT part of GNU Emacs.
 

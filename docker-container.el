@@ -24,9 +24,7 @@
 
 ;;; Code:
 
-
 (require 'json)
-(require 'tablist)
 (require 'transient)
 
 (require 'docker-core)
@@ -284,7 +282,7 @@ nil, ask the user for it."
   (docker-utils-ensure-items)
   (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async "rename" it (read-string (format "Rename \"%s\" to: " it))))
-  (tablist-revert))
+  (revert-buffer))
 
 (defun docker-container-shell-selection (prefix)
   "Run `docker-container-shell' on the containers selection forwarding PREFIX."
@@ -373,7 +371,7 @@ nil, ask the user for it."
    ("f" "Filter" "--filter " read-string)
    ("n" "Don't truncate" "--no-trunc")]
   ["Actions"
-   ("l" "List" tablist-revert)])
+   ("l" "List" revert-buffer)])
 
 (docker-utils-transient-define-prefix docker-container-pause ()
   "Transient for pausing containers."
@@ -444,6 +442,7 @@ nil, ask the user for it."
 
 (defvar docker-container-mode-map
   (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map docker-base-map)
     (define-key map "?" 'docker-container-help)
     (define-key map "C" 'docker-container-cp)
     (define-key map "D" 'docker-container-rm)
@@ -469,7 +468,7 @@ nil, ask the user for it."
   (interactive)
   (docker-utils-pop-to-buffer "*docker-containers*")
   (docker-container-mode)
-  (tablist-revert))
+  (revert-buffer))
 
 (define-derived-mode docker-container-mode tabulated-list-mode "Containers Menu"
   "Major mode for handling a list of docker containers."
@@ -478,7 +477,7 @@ nil, ask the user for it."
   (setq tabulated-list-sort-key docker-container-default-sort-key)
   (add-hook 'tabulated-list-revert-hook 'docker-container-refresh nil t)
   (tabulated-list-init-header)
-  (tablist-minor-mode))
+  (revert-buffer))
 
 (provide 'docker-container)
 
