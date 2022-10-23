@@ -24,7 +24,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -103,16 +103,16 @@ string that transforms the displayed values in the column."
    (t
     'docker-face-status-other)))
 
-(aio-defun docker-container-entries (&rest args)
+(defun docker-container-entries (&rest args)
   "Return the docker containers data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-container-id-template docker-container-columns))
-         (data (aio-await (docker-run-docker-async "container" "ls" args (format "--format=\"%s\"" fmt))))
+         (data (docker-run-docker-async "container" "ls" args (format "--format=\"%s\"" fmt)))
          (lines (string-split data "\n" t)))
     (mapcar (lambda (line) (docker-utils-parse docker-container-columns line)) lines)))
 
-(aio-defun docker-container-entries-propertized (&rest args)
+(defun docker-container-entries-propertized (&rest args)
   "Return the propertized docker containers data for `tabulated-list-entries'."
-  (let ((entries (aio-await (docker-container-entries args))))
+  (let ((entries (docker-container-entries args)))
     (mapcar #'docker-container-propertize-entry entries)))
 
 (defun docker-container-propertize-entry (entry)
@@ -123,11 +123,11 @@ string that transforms the displayed values in the column."
     (aset data index (propertize status 'font-lock-face (docker-container-status-face status)))
     entry))
 
-(aio-defun docker-container-update-status-async ()
+(defun docker-container-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :containers "Containers")
   (when docker-show-status
-    (let* ((entries (aio-await (docker-container-entries-propertized (docker-container-ls-arguments))))
+    (let* ((entries (docker-container-entries-propertized (docker-container-ls-arguments)))
            (index (cl-position-if (lambda (it) (string-equal "Status" (plist-get it :name))) docker-container-columns))
            (statuses (mapcar (lambda (it) (aref (cadr it) index)) entries))
            (faces (mapcar (lambda (it) (get-text-property 0 'font-lock-face it)) statuses))
@@ -146,14 +146,14 @@ string that transforms the displayed values in the column."
 
 (add-hook 'docker-open-hook #'docker-container-update-status-async)
 
-(aio-defun docker-container-refresh ()
+(defun docker-container-refresh ()
   "Refresh the containers list."
   (docker-utils-refresh-entries
    (docker-container-entries-propertized (docker-container-ls-arguments))))
 
 (defun docker-container-read-name ()
   "Read an container name."
-  (completing-read "Container: " (mapcar #'car (aio-wait-for (docker-container-entries)))))
+  (completing-read "Container: " (mapcar #'car (docker-container-entries))))
 
 (defvar eshell-buffer-name)
 
@@ -208,7 +208,7 @@ string that transforms the displayed values in the column."
     (shell (docker-utils-generate-new-buffer "docker" "shell:" default-directory))))
 
 ;;;###autoload (autoload 'docker-container-shell-env "docker-container" nil t)
-(aio-defun docker-container-shell-env (container &optional read-shell)
+(defun docker-container-shell-env (container &optional read-shell)
   "Open `shell' in CONTAINER with the environment variable set
 and default directory set to workdir. When READ-SHELL is not
 nil, ask the user for it."
@@ -221,7 +221,7 @@ nil, ask the user for it."
                         (if prefix
                             (format "%s|" (string-remove-suffix ":" prefix))
                           "/")))
-         (container-config (cdr (assq 'Config (aref (json-read-from-string (aio-await (docker-run-docker-async "inspect" container))) 0))))
+         (container-config (cdr (assq 'Config (aref (json-read-from-string (docker-run-docker-async "inspect" container)) 0))))
          (container-workdir (cdr (assq 'WorkingDir container-config)))
          (container-env (cdr (assq 'Env container-config)))
          (default-directory (format "%s%s%s" file-prefix container-address container-workdir))
@@ -278,12 +278,12 @@ nil, ask the user for it."
   (dolist (it (docker-utils-get-marked-items-ids))
     (docker-container-find-file it path)))
 
-(aio-defun docker-container-rename-selection ()
+(defun docker-container-rename-selection ()
   "Rename containers."
   (interactive)
   (docker-utils-ensure-items)
   (dolist (it (docker-utils-get-marked-items-ids))
-    (aio-await (docker-run-docker-async "rename" it (read-string (format "Rename \"%s\" to: " it)))))
+    (docker-run-docker-async "rename" it (read-string (format "Rename \"%s\" to: " it))))
   (tablist-revert))
 
 (defun docker-container-shell-selection (prefix)

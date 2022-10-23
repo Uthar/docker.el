@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 
 (require 'docker-group)
 (require 'docker-utils)
@@ -64,12 +64,7 @@
 
 (defun docker-run-async (program &rest args)
   "Execute \"PROGRAM ARGS\" and return a promise with the results."
-  (let* ((process (apply #'docker-run-start-file-process-shell-command program args))
-         (promise (aio-promise)))
-    (set-process-query-on-exit-flag process nil)
-    (set-process-sentinel process (lambda (&rest rest)
-                                    (apply #'docker-process-sentinel promise rest)))
-    promise))
+  (shell-command-to-string (string-join (flatten-list (cons program args)) " ")))
 
 (defun docker-run-async-with-buffer (program &rest args)
   "Execute \"PROGRAM ARGS\" and display output in a new buffer."
@@ -95,21 +90,6 @@
         (vterm-other-window
          (apply #'docker-utils-generate-new-buffer-name program process-args)))
     (error "The vterm package is not installed")))
-
-(defun docker-process-sentinel (promise process event)
-  "Sentinel that resolves the PROMISE using PROCESS and EVENT."
-  (when (memq (process-status process) '(exit signal))
-    (setq event (substring event 0 -1))
-    (if (not (string-equal event "finished"))
-        (error "Error running: \"%s\" (%s)" (process-name process) event)
-      (aio-resolve promise
-                   (lambda ()
-                     (when docker-show-messages
-                       (message "Finished: %s" (process-name process)))
-                     (run-with-timer 2 nil (lambda () (message nil)))
-                     (with-current-buffer (process-buffer process)
-                       (prog1 (buffer-substring-no-properties (point-min) (point-max))
-                         (kill-buffer))))))))
 
 (provide 'docker-process)
 

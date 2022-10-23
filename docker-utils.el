@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'json)
 (require 'tramp)
 (require 'tablist)
@@ -79,7 +79,7 @@ Execute BODY in a buffer named with the help of NAME."
 (defmacro docker-utils-refresh-entries (promise)
   "Update the current buffer with the results of PROMISE."
   `(let ((buffer (current-buffer))
-         (entries (aio-await ,promise)))
+         (entries ,promise))
      (with-current-buffer buffer
        (setq tabulated-list-entries entries)
        (tabulated-list-print t))))

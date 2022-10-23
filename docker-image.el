@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -120,17 +120,17 @@ be the list (repository tag id).  See `docker-image-id-template'."
                     (format "%s:%s" repo tag))))
       (list new-id rest))))
 
-(aio-defun docker-image-entries (&rest args)
+(defun docker-image-entries (&rest args)
   "Return the docker images data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-image-id-template docker-image-columns))
-         (data (aio-await (docker-run-docker-async "image" "ls" args (format "--format=\"%s\"" fmt))))
+         (data (docker-run-docker-async "image" "ls" args (format "--format=\"%s\"" fmt)))
          (lines (string-split data "\n" t)))
     (mapcar (lambda (it) (docker-image-make-id (docker-utils-parse docker-image-columns it))) lines)))
 
-(aio-defun docker-image-entries-propertized (&rest args)
+(defun docker-image-entries-propertized (&rest args)
   "Return the propertized docker images data for `tabulated-list-entries'."
-  (let ((entries (aio-await (docker-image-entries args)))
-        (dangling (aio-await (docker-image-entries args "--filter dangling=true"))))
+  (let ((entries (docker-image-entries args))
+        (dangling (docker-image-entries args "--filter dangling=true")))
     (mapcar (lambda (it)
               (if (member it dangling)
                   (docker-image-entry-set-dangling it)
@@ -152,11 +152,11 @@ The result is the tabulated list id for an entry is propertized with
   (list (propertize (car entry) 'docker-image-dangling t)
         (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
-(aio-defun docker-image-update-status-async ()
+(defun docker-image-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :images "Images")
   (when docker-show-status
-    (let* ((entries (aio-await (docker-image-entries-propertized (docker-image-ls-arguments))))
+    (let* ((entries (docker-image-entries-propertized (docker-image-ls-arguments)))
            (dangling (cl-remove-if-not (lambda (it) (docker-image-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :images
@@ -167,20 +167,20 @@ The result is the tabulated list id for an entry is propertized with
 
 (add-hook 'docker-open-hook #'docker-image-update-status-async)
 
-(aio-defun docker-image-refresh ()
+(defun docker-image-refresh ()
   "Refresh the images list."
   (docker-utils-refresh-entries
    (docker-image-entries-propertized (docker-image-ls-arguments))))
 
 (defun docker-image-read-name ()
   "Read an image name."
-  (completing-read "Image: " (mapcar #'car (aio-wait-for (docker-image-entries)))))
+  (completing-read "Image: " (mapcar #'car (docker-image-entries))))
 
 ;;;###autoload (autoload 'docker-image-pull-one "docker-image" nil t)
-(aio-defun docker-image-pull-one (name &optional all)
+(defun docker-image-pull-one (name &optional all)
   "Pull the image named NAME.  If ALL is set, use \"-a\"."
   (interactive (list (docker-image-read-name) current-prefix-arg))
-  (aio-await (docker-run-docker-async "pull" (when all "-a") name))
+  (docker-run-docker-async "pull" (when all "-a") name)
   (tablist-revert))
 
 (defun docker-image-run-selection (command)
@@ -190,13 +190,13 @@ The result is the tabulated list id for an entry is propertized with
   (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async-with-buffer "container" "run" (transient-args 'docker-image-run) it command)))
 
-(aio-defun docker-image-tag-selection ()
+(defun docker-image-tag-selection ()
   "Tag images."
   (interactive)
   (docker-utils-ensure-items)
-  (let* ((ids (docker-utils-get-marked-items-ids))
-         (promises (mapcar (lambda (it) (docker-run-docker-async "tag" it (read-string (format "Tag for %s: " it)))) ids)))
-    (aio-await (aio-all promises))
+  (let ((ids (docker-utils-get-marked-items-ids)))
+    (dolist (id ids)
+      (docker-run-docker-async "tag" id (read-string (format "Tag for %s: " id))))
     (tablist-revert)))
 
 (defun docker-image-mark-dangling ()

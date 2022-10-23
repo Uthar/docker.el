@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'transient)
 
 (require 'docker-group)
@@ -65,20 +65,20 @@
             (propertize "Actions on" 'face 'transient-heading)
             (propertize items        'face 'transient-value))))
 
-(aio-defun docker-generic-action (action args)
+(defun docker-generic-action (action args)
   "Run \"`docker-command' ACTION ARGS\" on each of the selected items."
   (interactive (list (docker-get-transient-action)
                      (transient-args transient-current-command)))
-  (let* ((ids (docker-utils-get-marked-items-ids))
-         (promises (mapcar (lambda (it) (docker-run-docker-async action args it)) ids)))
-    (aio-await (aio-all promises))
+  (let ((ids (docker-utils-get-marked-items-ids)))
+    (dolist (id ids)
+      (docker-run-docker-async action args id))
     (tablist-revert)))
 
-(aio-defun docker-generic-action-multiple-ids (action args)
+(defun docker-generic-action-multiple-ids (action args)
   "Same as `docker-generic-action', but group selection ids into a single command."
   (interactive (list (docker-get-transient-action)
                      (transient-args transient-current-command)))
-  (aio-await (docker-run-docker-async action args (docker-utils-get-marked-items-ids)))
+  (docker-run-docker-async action args (docker-utils-get-marked-items-ids))
   (tablist-revert))
 
 (defun docker-generic-action-with-buffer (action args)
@@ -88,13 +88,13 @@
   (dolist (it (docker-utils-get-marked-items-ids))
     (docker-run-docker-async-with-buffer (string-split action " ") args it)))
 
-(aio-defun docker-inspect ()
+(defun docker-inspect ()
   "Run \"`docker-command' inspect\" on the selected items."
   (interactive)
   (docker-utils-ensure-items)
   (dolist (it (docker-utils-get-marked-items-ids))
     (let* ((id it)
-           (data (aio-await (docker-run-docker-async "inspect" id))))
+           (data (docker-run-docker-async "inspect" id)))
       (docker-utils-with-buffer (format "inspect %s" id)
         (insert data)
         (if (fboundp 'json-mode)

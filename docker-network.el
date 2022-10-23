@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -81,17 +81,17 @@ displayed values in the column."
 
 (defalias 'docker-network-inspect 'docker-inspect)
 
-(aio-defun docker-network-entries (&rest args)
+(defun docker-network-entries (&rest args)
   "Return the docker networks data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-network-id-template docker-network-columns))
-         (data (aio-await (docker-run-docker-async "network" "ls" args (format "--format=\"%s\"" fmt))))
+         (data (docker-run-docker-async "network" "ls" args (format "--format=\"%s\"" fmt)))
          (lines (string-split data "\n" t)))
     (mapcar (lambda (col) (docker-utils-parse docker-network-columns col)) lines)))
 
-(aio-defun docker-network-entries-propertized (&rest args)
+(defun docker-network-entries-propertized (&rest args)
   "Return the propertized docker networks data for `tabulated-list-entries'."
-  (let ((entries (aio-await (docker-network-entries args)))
-        (dangling (aio-await (docker-network-entries args "--filter dangling=true"))))
+  (let ((entries (docker-network-entries args))
+        (dangling (docker-network-entries args "--filter dangling=true")))
     (mapcar (lambda (it)
               (if (member it dangling)
                   (docker-network-entry-set-dangling it)
@@ -112,11 +112,11 @@ The result is the tabulated list id for an entry is propertized with
   (list (propertize (car entry) 'docker-network-dangling t)
         (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
-(aio-defun docker-network-update-status-async ()
+(defun docker-network-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :networks "Networks")
   (when docker-show-status
-    (let* ((entries (aio-await (docker-network-entries-propertized (docker-network-ls-arguments))))
+    (let* ((entries (docker-network-entries-propertized (docker-network-ls-arguments)))
            (dangling (cl-remove-if-not (lambda (it) (docker-network-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :networks
@@ -127,14 +127,14 @@ The result is the tabulated list id for an entry is propertized with
 
 (add-hook 'docker-open-hook #'docker-network-update-status-async)
 
-(aio-defun docker-network-refresh ()
+(defun docker-network-refresh ()
   "Refresh the networks list."
   (docker-utils-refresh-entries
    (docker-network-entries-propertized (docker-network-ls-arguments))))
 
 (defun docker-network-read-name ()
   "Read a network name."
-  (completing-read "Network: " (mapcar #'car (aio-wait-for (docker-network-entries)))))
+  (completing-read "Network: " (mapcar #'car (docker-network-entries))))
 
 (defun docker-network-mark-dangling ()
   "Mark only the dangling networks listed in *docker-networks*.

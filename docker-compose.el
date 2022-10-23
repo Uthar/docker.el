@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'transient)
 
 (require 'docker-group)
@@ -47,17 +47,17 @@
   "Execute \"`docker-compose-command' ACTION ARGS\" and display output in a new buffer."
   (apply #'docker-run-async-with-buffer docker-compose-command (docker-compose-arguments) action args))
 
-(aio-defun docker-compose-services ()
+(defun docker-compose-services ()
   "Return the list of services."
-  (string-split (aio-await (docker-compose-run-docker-compose-async "config" "--services" "2>/dev/null")) "\n" t))
+  (string-split (docker-compose-run-docker-compose-async "config" "--services" "2>/dev/null") "\n" t))
 
-(aio-defun docker-compose-read-services-names ()
+(defun docker-compose-read-services-names ()
   "Read the services names."
-  (completing-read-multiple "Services: " (aio-await (docker-compose-services))))
+  (completing-read-multiple "Services: " (docker-compose-services)))
 
-(aio-defun docker-compose-read-service-name ()
+(defun docker-compose-read-service-name ()
   "Read one service name."
-  (completing-read "Service: " (aio-await (docker-compose-services))))
+  (completing-read "Service: " (docker-compose-services)))
 
 (defun docker-compose-read-project (prompt &rest _args)
   "Read the `docker-compose' project forwarding PROMPT."
@@ -88,13 +88,13 @@
   "Wrapper around `read-file-name' forwarding PROMPT and INITIAL-INPUT."
   (read-file-name prompt nil nil t initial-input (apply-partially 'string-match ".*\\.yml\\|.*\\.yaml")))
 
-(aio-defun docker-compose-run-action-for-one-service (action args services)
+(defun docker-compose-run-action-for-one-service (action args services)
   "Run \"docker-compose ACTION ARGS SERVICES\"."
   (interactive (list
                 (car (last (string-split (symbol-name transient-current-command) "-")))
                 (transient-args transient-current-command)
                 nil))
-  (setq services (aio-await (docker-compose-read-services-names)))
+  (setq services (docker-compose-read-services-names))
   (docker-compose-run-docker-compose-async-with-buffer action args services))
 
 (defun docker-compose-run-action-for-all-services (action args)
@@ -104,14 +104,14 @@
                 (transient-args transient-current-command)))
   (docker-compose-run-docker-compose-async-with-buffer action args))
 
-(aio-defun docker-compose-run-action-with-command (action args service command)
+(defun docker-compose-run-action-with-command (action args service command)
   "Run \"docker-compose ACTION ARGS SERVICE COMMAND\"."
   (interactive (list
                 (car (last (string-split (symbol-name transient-current-command) "-")))
                 (transient-args transient-current-command)
                 nil
                 (read-string "Command: ")))
-  (setq service (aio-await (docker-compose-read-service-name)))
+  (setq service (docker-compose-read-service-name))
   (docker-compose-run-docker-compose-async-with-buffer action args service command))
 
 (transient-define-prefix docker-compose-build ()

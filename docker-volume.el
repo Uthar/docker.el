@@ -23,7 +23,7 @@
 
 ;;; Code:
 
-(require 'aio)
+
 (require 'json)
 (require 'tablist)
 (require 'transient)
@@ -79,17 +79,17 @@ displayed values in the column."
 
 (defalias 'docker-volume-inspect 'docker-inspect)
 
-(aio-defun docker-volume-entries (&rest args)
+(defun docker-volume-entries (&rest args)
   "Return the docker volumes data for `tabulated-list-entries'."
   (let* ((fmt (docker-utils-make-format-string docker-volume-id-template docker-volume-columns))
-         (data (aio-await (docker-run-docker-async "volume" "ls" args (format "--format=\"%s\"" fmt))))
+         (data (docker-run-docker-async "volume" "ls" args (format "--format=\"%s\"" fmt)))
          (lines (string-split data "\n" t)))
     (mapcar (lambda (line) (docker-utils-parse docker-volume-columns line)) lines)))
 
-(aio-defun docker-volume-entries-propertized (&rest args)
+(defun docker-volume-entries-propertized (&rest args)
   "Return the propertized docker volumes data for `tabulated-list-entries'."
-  (let ((entries (aio-await (docker-volume-entries args)))
-        (dangling (aio-await (docker-volume-entries args "--filter dangling=true"))))
+  (let ((entries (docker-volume-entries args))
+        (dangling (docker-volume-entries args "--filter dangling=true")))
     (mapcar (lambda (it)
               (if (member it dangling)
                   (docker-volume-entry-set-dangling it)
@@ -110,11 +110,11 @@ The result is the tabulated list id for an entry is propertized with
   (list (propertize (car entry) 'docker-volume-dangling t)
         (apply #'vector (mapcar (lambda (it) (propertize it 'font-lock-face 'docker-face-dangling)) (cadr entry)))))
 
-(aio-defun docker-volume-update-status-async ()
+(defun docker-volume-update-status-async ()
   "Write the status to `docker-status-strings'."
   (plist-put docker-status-strings :volumes "Volumes")
   (when docker-show-status
-    (let* ((entries (aio-await (docker-volume-entries-propertized (docker-volume-ls-arguments))))
+    (let* ((entries (docker-volume-entries-propertized (docker-volume-ls-arguments)))
            (dangling (cl-remove-if-not (lambda (it) (docker-volume-dangling-p (car it))) entries)))
       (plist-put docker-status-strings
                  :volumes
@@ -125,20 +125,20 @@ The result is the tabulated list id for an entry is propertized with
 
 (add-hook 'docker-open-hook #'docker-volume-update-status-async)
 
-(aio-defun docker-volume-refresh ()
+(defun docker-volume-refresh ()
   "Refresh the volumes list."
   (docker-utils-refresh-entries
    (docker-volume-entries-propertized (docker-volume-ls-arguments))))
 
 (defun docker-volume-read-name ()
   "Read a volume name."
-  (completing-read "Volume: " (mapcar #'car (aio-wait-for (docker-volume-entries)))))
+  (completing-read "Volume: " (mapcar #'car (docker-volume-entries))))
 
 ;;;###autoload (autoload 'docker-volume-dired "docker-volume" nil t)
-(aio-defun docker-volume-dired (name)
+(defun docker-volume-dired (name)
   "Enter `dired' in the volume named NAME."
   (interactive (list (docker-volume-read-name)))
-  (let ((path (aio-await (docker-run-docker-async "inspect" "-f" "\"{{ .Mountpoint }}\"" name))))
+  (let ((path (docker-run-docker-async "inspect" "-f" "\"{{ .Mountpoint }}\"" name)))
     (dired (format "/sudo::%s" path))))
 
 (defun docker-volume-dired-selection ()
